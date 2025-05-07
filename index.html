@@ -1,0 +1,713 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nostr Query Relay</title>
+    <style>
+        body {
+            font-family: monospace;
+            background-color: #121417;
+            color: #e0e0e0;
+            margin: 0;
+            padding: 0;
+        }
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 10px;
+        }
+        .header {
+            display: flex;
+            align-items: center;
+            padding: 10px;
+            background-color: #1a1d21;
+            border-bottom: 1px solid #333;
+        }
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 36px;
+            height: 20px;
+            margin-right: 10px;
+        }
+        .switch input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #333;
+            transition: .4s;
+            border-radius: 34px;
+        }
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 16px;
+            width: 16px;
+            left: 2px;
+            bottom: 2px;
+            background-color: white;
+            transition: .4s;
+            border-radius: 50%;
+        }
+        input:checked + .slider {
+            background-color: #4caf50;
+        }
+        input:checked + .slider:before {
+            transform: translateX(16px);
+        }
+        .header-title {
+            margin-right: 10px;
+            font-weight: bold;
+        }
+        .relay-input {
+            flex-grow: 1;
+            background-color: #1a1d21;
+            color: #e0e0e0;
+            border: 1px solid #333;
+            padding: 5px 10px;
+            margin-left: 10px;
+            font-family: monospace;
+        }
+        .editor {
+            background-color: #121417;
+            border: 1px solid #333;
+            border-top: none;
+            height: 200px;
+            overflow: auto;
+            position: relative;
+        }
+        .line-numbers {
+            float: left;
+            text-align: right;
+            padding: 10px 10px;
+            margin-right: 10px;
+            color: #666;
+            background-color: #1a1d21;
+            user-select: none;
+        }
+        .code-area {
+            margin-left: 40px;
+            padding: 10px 0;
+            outline: none;
+            color: #e0e0e0;
+            white-space: pre-wrap;
+            word-break: break-all;
+        }
+        pre, code {
+            margin: 0;
+            font-family: monospace;
+        }
+        .json-key { color: #79b8ff; }
+        .json-string { color: #9ecbff; }
+        .json-number { color: #ffab70; }
+        .json-boolean { color: #56d364; }
+        .json-null { color: #8b949e; }
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            background-color: #1a1d21;
+            border: 1px solid #333;
+            border-top: none;
+        }
+        .events-count {
+            font-weight: bold;
+        }
+        .button {
+            background-color: #7cb342;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .results {
+            margin-top: 20px;
+        }
+        .event-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #1a1d21;
+            border: 1px solid #333;
+            cursor: pointer;
+        }
+        .event-content {
+            background-color: #121417;
+            border: 1px solid #333;
+            border-top: none;
+            padding: 0;
+            overflow: auto;
+            max-height: 0;
+            transition: max-height 0.2s ease-out;
+        }
+        .event-content.expanded {
+            max-height: 500px;
+            padding: 10px;
+        }
+        .toggle-raw {
+            display: flex;
+            align-items: center;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        .chevron {
+            transition: transform 0.3s;
+        }
+        .chevron.down {
+            transform: rotate(180deg);
+        }
+        .code-json {
+            white-space: pre-wrap;
+            padding: 10px;
+        }
+        .error-message {
+            position: fixed;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: #333;
+            border: 1px solid #555;
+            border-radius: 5px;
+            padding: 20px;
+            max-width: 80%;
+            z-index: 1000;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.5);
+        }
+        .error-message h3 {
+            margin-top: 0;
+            color: #ff6b6b;
+        }
+        .error-message .button {
+            margin-top: 15px;
+            float: right;
+        }
+        .quick-tools {
+            background-color: #1a1d21;
+            border: 1px solid #333;
+            border-top: none;
+            padding: 10px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .quick-tools .button {
+            padding: 5px 10px;
+            font-size: 12px;
+        }
+        .loading {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        .loading-content {
+            background-color: #333;
+            border-radius: 5px;
+            padding: 20px;
+            text-align: center;
+        }
+        .spinner {
+            border: 5px solid #444;
+            border-top: 5px solid #4caf50;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin: 0 auto 15px;
+        }
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <label class="switch">
+                <input type="checkbox" id="queryToggle" checked>
+                <span class="slider"></span>
+            </label>
+            <span class="header-title">Query Relay</span>
+            <input type="text" class="relay-input" id="relayInput" value="wss://relay.damus.io" placeholder="Enter relay address">
+        </div>
+        
+        <div class="editor">
+            <div class="line-numbers" id="lineNumbers">
+                <div>1</div>
+                <div>2</div>
+                <div>3</div>
+                <div>4</div>
+                <div>5</div>
+                <div>6</div>
+            </div>
+            <div class="code-area" id="codeEditor" contenteditable="true" spellcheck="false">{
+    "kinds": [
+        10002
+    ],
+    "limit": 1
+}</div>
+        </div>
+
+        <div class="quick-tools">
+            <button class="button" id="addPubkeyBtn">Add Pubkey</button>
+            <button class="button" id="addKindBtn">Change Kind</button>
+            <button class="button" id="increaseLimit">Increase Limit</button>
+            <button class="button" id="checkJson">Validate JSON</button>
+            <button class="button" id="prettifyJson">Prettify JSON</button>
+            <button class="button" id="clearResults">Clear Results</button>
+        </div>
+        
+        <div class="status-bar">
+            <div class="events-count"><span id="eventCount">0</span> events</div>
+            <div class="status" id="statusText">Subscribed</div>
+            <button class="button" id="runButton">Run</button>
+        </div>
+        
+        <div class="results" id="resultsContainer">
+            <!-- Results will be populated here -->
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Format the JSON in the editor initially
+            formatJsonInEditor();
+            
+            // Run button click event
+            document.getElementById('runButton').addEventListener('click', fetchNostrEvents);
+            
+            // Format JSON when editor loses focus
+            document.getElementById('codeEditor').addEventListener('blur', formatJsonInEditor);
+
+            // Line numbers
+            const codeEditor = document.getElementById('codeEditor');
+            const lineNumbers = document.getElementById('lineNumbers');
+            
+            codeEditor.addEventListener('input', updateLineNumbers);
+            codeEditor.addEventListener('scroll', function() {
+                lineNumbers.scrollTop = codeEditor.scrollTop;
+            });
+
+            // Quick tools
+            document.getElementById('addPubkeyBtn').addEventListener('click', function() {
+                addPubkeyToFilter();
+            });
+
+            document.getElementById('addKindBtn').addEventListener('click', function() {
+                changeKind();
+            });
+
+            document.getElementById('increaseLimit').addEventListener('click', function() {
+                increaseLimit();
+            });
+
+            document.getElementById('checkJson').addEventListener('click', function() {
+                validateJson();
+            });
+
+            document.getElementById('prettifyJson').addEventListener('click', function() {
+                formatJsonInEditor();
+            });
+
+            document.getElementById('clearResults').addEventListener('click', function() {
+                document.getElementById('resultsContainer').innerHTML = '';
+                document.getElementById('eventCount').textContent = '0';
+            });
+
+            // Initial line numbers update
+            updateLineNumbers();
+        });
+
+        function updateLineNumbers() {
+            const codeEditor = document.getElementById('codeEditor');
+            const lineNumbers = document.getElementById('lineNumbers');
+            
+            // Count lines
+            const lines = codeEditor.textContent.split('\n');
+            const lineCount = lines.length;
+            
+            // Generate line numbers
+            let lineNumbersHtml = '';
+            for (let i = 1; i <= lineCount; i++) {
+                lineNumbersHtml += `<div>${i}</div>`;
+            }
+            
+            lineNumbers.innerHTML = lineNumbersHtml;
+        }
+
+        function formatJsonInEditor() {
+            const editor = document.getElementById('codeEditor');
+            try {
+                const json = JSON.parse(editor.textContent);
+                editor.innerHTML = syntaxHighlight(JSON.stringify(json, null, 4));
+                updateLineNumbers();
+                return true;
+            } catch (e) {
+                // If JSON is invalid, don't format
+                return false;
+            }
+        }
+
+        function validateJson() {
+            const editor = document.getElementById('codeEditor');
+            try {
+                JSON.parse(editor.textContent);
+                showError('JSON is valid!', 'Valid JSON format detected.', 'success');
+                return true;
+            } catch (e) {
+                showError('JSON Error', e.message, 'error');
+                return false;
+            }
+        }
+
+        function addPubkeyToFilter() {
+            const editor = document.getElementById('codeEditor');
+            try {
+                let json = JSON.parse(editor.textContent);
+                
+                // Prompt for pubkey
+                const pubkey = prompt("Enter the public key (hex format):");
+                if (!pubkey) return;
+                
+                // Clean the pubkey input - ensure it's lowercase and remove non-hex characters
+                const cleanPubkey = pubkey.toLowerCase().replace(/[^a-f0-9]/g, '');
+                
+                // Add or update authors field
+                if (!json.authors) {
+                    json.authors = [cleanPubkey];
+                } else if (Array.isArray(json.authors)) {
+                    if (!json.authors.includes(cleanPubkey)) {
+                        json.authors.push(cleanPubkey);
+                    }
+                } else {
+                    json.authors = [cleanPubkey];
+                }
+                
+                // Update editor
+                editor.innerHTML = syntaxHighlight(JSON.stringify(json, null, 4));
+                updateLineNumbers();
+            } catch (e) {
+                showError('JSON Error', 'Cannot add pubkey: ' + e.message, 'error');
+            }
+        }
+
+        function changeKind() {
+            const editor = document.getElementById('codeEditor');
+            try {
+                let json = JSON.parse(editor.textContent);
+                
+                // Prompt for kind
+                const kind = prompt("Enter the event kind (number):", "10002");
+                if (!kind) return;
+                
+                // Parse kind as integer
+                const kindNumber = parseInt(kind, 10);
+                if (isNaN(kindNumber)) {
+                    showError('Input Error', 'Kind must be a number', 'error');
+                    return;
+                }
+                
+                // Update or add kinds field
+                if (!json.kinds) {
+                    json.kinds = [kindNumber];
+                } else if (Array.isArray(json.kinds)) {
+                    json.kinds = [kindNumber];
+                } else {
+                    json.kinds = [kindNumber];
+                }
+                
+                // Update editor
+                editor.innerHTML = syntaxHighlight(JSON.stringify(json, null, 4));
+                updateLineNumbers();
+            } catch (e) {
+                showError('JSON Error', 'Cannot change kind: ' + e.message, 'error');
+            }
+        }
+
+        function increaseLimit() {
+            const editor = document.getElementById('codeEditor');
+            try {
+                let json = JSON.parse(editor.textContent);
+                
+                // Get current limit or default to 0
+                const currentLimit = json.limit || 0;
+                
+                // Increase limit
+                json.limit = currentLimit + 10;
+                
+                // Update editor
+                editor.innerHTML = syntaxHighlight(JSON.stringify(json, null, 4));
+                updateLineNumbers();
+            } catch (e) {
+                showError('JSON Error', 'Cannot increase limit: ' + e.message, 'error');
+            }
+        }
+
+        function syntaxHighlight(json) {
+            return json.replace(/("(\\u[a-zA-Z0-9]{4}|\\[^u]|[^\\"])*"(\s*:)?|\b(true|false|null)\b|-?\d+(?:\.\d*)?(?:[eE][+\-]?\d+)?)/g, function (match) {
+                let cls = 'json-number';
+                if (/^"/.test(match)) {
+                    if (/:$/.test(match)) {
+                        cls = 'json-key';
+                    } else {
+                        cls = 'json-string';
+                    }
+                } else if (/true|false/.test(match)) {
+                    cls = 'json-boolean';
+                } else if (/null/.test(match)) {
+                    cls = 'json-null';
+                }
+                return '<span class="' + cls + '">' + match + '</span>';
+            });
+        }
+
+        function showError(title, message, type = 'error') {
+            // Remove any existing error messages
+            const existingError = document.querySelector('.error-message');
+            if (existingError) {
+                existingError.remove();
+            }
+            
+            // Create error message element
+            const errorDiv = document.createElement('div');
+            errorDiv.classList.add('error-message');
+            
+            // Different styling based on type
+            if (type === 'success') {
+                errorDiv.innerHTML = `
+                    <h3 style="color: #4caf50;">${title}</h3>
+                    <p>${message}</p>
+                    <button class="button" onclick="this.parentNode.remove()">OK</button>
+                `;
+            } else {
+                errorDiv.innerHTML = `
+                    <h3>${title}</h3>
+                    <p>${message}</p>
+                    <button class="button" onclick="this.parentNode.remove()">OK</button>
+                `;
+            }
+            
+            // Add to document
+            document.body.appendChild(errorDiv);
+            
+            // Auto-remove after 5 seconds for success messages
+            if (type === 'success') {
+                setTimeout(() => {
+                    if (errorDiv.parentNode) {
+                        errorDiv.remove();
+                    }
+                }, 3000);
+            }
+        }
+        
+        function showLoading(message = 'Connecting to relay...') {
+            // Remove any existing loading
+            hideLoading();
+            
+            // Create loading element
+            const loadingDiv = document.createElement('div');
+            loadingDiv.classList.add('loading');
+            loadingDiv.innerHTML = `
+                <div class="loading-content">
+                    <div class="spinner"></div>
+                    <p id="loading-message">${message}</p>
+                </div>
+            `;
+            
+            // Add to document
+            document.body.appendChild(loadingDiv);
+        }
+        
+        function hideLoading() {
+            const loading = document.querySelector('.loading');
+            if (loading) {
+                loading.remove();
+            }
+        }
+        
+        function updateLoadingMessage(message) {
+            const loadingMessage = document.getElementById('loading-message');
+            if (loadingMessage) {
+                loadingMessage.textContent = message;
+            }
+        }
+        
+        async function fetchNostrEvents() {
+            if (!validateJson()) {
+                return;
+            }
+            
+            const relayUrl = document.getElementById('relayInput').value;
+            const editor = document.getElementById('codeEditor');
+            const resultsContainer = document.getElementById('resultsContainer');
+            const statusText = document.getElementById('statusText');
+            
+            // Clear previous results
+            resultsContainer.innerHTML = '';
+            document.getElementById('eventCount').textContent = '0';
+            statusText.textContent = 'Connecting...';
+            
+            try {
+                // Parse the JSON filter
+                const filter = JSON.parse(editor.textContent);
+                
+                // Show loading
+                showLoading();
+                
+                // Connect to relay
+                const socket = new WebSocket(relayUrl);
+                
+                // Set a timeout to close the connection if it takes too long
+                const timeoutId = setTimeout(() => {
+                    if (socket.readyState === WebSocket.CONNECTING) {
+                        socket.close();
+                        hideLoading();
+                        showError('Connection Timeout', 'Could not connect to relay. Check the relay URL and try again.');
+                        statusText.textContent = 'Connection Failed';
+                    }
+                }, 10000);
+                
+                socket.onopen = () => {
+                    clearTimeout(timeoutId);
+                    statusText.textContent = 'Connected, waiting for events...';
+                    updateLoadingMessage('Subscribed to relay, waiting for events...');
+                    
+                    // Subscribe to events with the filter
+                    const subId = Math.random().toString(36).substring(2, 15);
+                    socket.send(JSON.stringify(["REQ", subId, filter]));
+                    
+                    // Set a timeout to close the subscription after some time
+                    setTimeout(() => {
+                        if (socket.readyState === WebSocket.OPEN) {
+                            socket.send(JSON.stringify(["CLOSE", subId]));
+                            socket.close();
+                            statusText.textContent = 'Subscription ended (timeout)';
+                            hideLoading();
+                        }
+                    }, 15000); // Close after 15 seconds
+                };
+                
+                const events = [];
+                
+                socket.onmessage = (event) => {
+                    try {
+                        hideLoading();
+                        
+                        const data = JSON.parse(event.data);
+                        
+                        if (data[0] === "EVENT" && data[1] && data[2]) {
+                            events.push(data[2]);
+                            displayEvent(data[2], events.length - 1);
+                            document.getElementById('eventCount').textContent = events.length;
+                            statusText.textContent = `Received ${events.length} event(s)`;
+                        } else if (data[0] === "EOSE") {
+                            statusText.textContent = 'End of stored events';
+                        } else if (data[0] === "NOTICE") {
+                            showError('Relay Notice', data[1] || 'No message provided', 'info');
+                            statusText.textContent = 'Received notice from relay';
+                        } else if (data[0] === "OK") {
+                            // Handle OK message
+                        } else if (data[0] === "CLOSED") {
+                            statusText.textContent = 'Subscription closed by relay';
+                            showError('Subscription Closed', data[2] || 'No reason provided', 'info');
+                        }
+                    } catch (err) {
+                        console.error('Error processing message:', err);
+                        showError('Processing Error', 'Error processing message from relay: ' + err.message);
+                    }
+                };
+                
+                socket.onclose = () => {
+                    hideLoading();
+                    if (events.length === 0) {
+                        statusText.textContent = 'No events received';
+                    } else {
+                        statusText.textContent = `Closed with ${events.length} event(s)`;
+                    }
+                };
+                
+                socket.onerror = (error) => {
+                    hideLoading();
+                    console.error('WebSocket error:', error);
+                    showError('Connection Error', 'Error connecting to relay. Check your relay URL.');
+                    statusText.textContent = 'Connection error';
+                };
+                
+            } catch (e) {
+                hideLoading();
+                showError('Filter Error', 'Invalid JSON filter: ' + e.message);
+                statusText.textContent = 'Error';
+            }
+        }
+        
+        function displayEvent(event, index) {
+            const resultsContainer = document.getElementById('resultsContainer');
+            
+            const eventId = event.id ? event.id.substring(0, 8) : 'unknown';
+            const kind = event.kind || 'unknown';
+            
+            const eventDiv = document.createElement('div');
+            eventDiv.classList.add('event');
+            
+            // Create event header
+            const eventHeader = document.createElement('div');
+            eventHeader.classList.add('event-header');
+            eventHeader.innerHTML = `
+                <div>${eventId} (${kind}) [${index}] ${event.pubkey ? event.pubkey.substring(0, 10) + '...' : 'unknown'}</div>
+                <div class="toggle-raw">
+                    <input type="checkbox" id="raw-${index}" style="margin-right: 5px;">
+                    <label for="raw-${index}">Raw</label>
+                    <span class="chevron" style="margin-left: 10px;">▲</span>
+                </div>
+            `;
+            
+            // Create event content
+            const eventContent = document.createElement('div');
+            eventContent.classList.add('event-content');
+            eventContent.innerHTML = `<pre class="code-json">${syntaxHighlight(JSON.stringify(event, null, 2))}</pre>`;
+            
+            // Add click handler to toggle expand/collapse
+            eventHeader.addEventListener('click', function(e) {
+                // Ignore clicks on the raw checkbox
+                if (e.target.id === `raw-${index}` || e.target.htmlFor === `raw-${index}`) {
+                    return;
+                }
+                
+                eventContent.classList.toggle('expanded');
+                const chevron = this.querySelector('.chevron');
+                chevron.classList.toggle('down');
+            });
+            
+            eventDiv.appendChild(eventHeader);
+            eventDiv.appendChild(eventContent);
+            resultsContainer.appendChild(eventDiv);
+            
+            // Open the first event by default
+            if (index === 0) {
+                eventContent.classList.add('expanded');
+                eventHeader.querySelector('.chevron').classList.add('down');
+            }
+        }
+    </script>
+</body>
+</html>
